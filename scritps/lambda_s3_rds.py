@@ -1,5 +1,3 @@
-import os
-import csv
 import boto3
 import pymysql
 import pandas as pd
@@ -32,28 +30,21 @@ def lambda_handler(event, context):
         # Seleciona somente as colunas necessarias
         df = df[['id', 'title', 'genres', 'revenue', 'budget', 'release_date', 'vote_count']]
 
-        # Remove valores nulos
-        df = df.dropna(subset=['title', 'revenue', 'budget', 'release_date', 'vote_count'])
+        df['id'] = pd.to_numeric(df['id'], errors='coerce')
+        df['id'] = df['id'].astype(int)
 
         # Transformar valores string em NaN para depois dropá-los
         df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce')
 
-        # Remove NaN da coluna revenue
-        df = df.dropna(subset='revenue')
-
         # Transformar valores string em NaN para depois dropá-los
         df['budget'] = pd.to_numeric(df['budget'], errors='coerce')
 
-        # Remove NaN da coluna revenue
-        df = df.dropna(subset='budget')
+        df['vote_count'] = pd.to_numeric(df['vote_count'], errors='coerce')
 
-        # Cria coluna lucro
-        df['lucro'] = df['revenue'] - df['budget']
+        df[['title', 'release_date']] = df[['title', 'release_date']].astype(str)
 
-        # Remove valores onde lucro = 0
-        df = df[df['revenue'] != 0]
+        df = df.dropna(subset=['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
 
-        # Funcao que formata a coluna lucro para monetario
         def formatar_monetario(valor):
             return '{:.2}'.format(valor)
 
@@ -61,10 +52,15 @@ def lambda_handler(event, context):
 
         # Criacao da tabela no RDS MySQL com a estrutura desejada
         create_table_query = """
-        CREATE TABLE nova_tabela (
-            coluna1 VARCHAR(255),
-            coluna2 INT,
-            preco FLOAT
+        CREATE TABLE tbl_movies (
+            id INT NOT NULL,
+            title VARCHAR(255),
+            revenue FLOAT,
+            budget FLOAT,
+            release_date VARCHAR(15),
+            vote_count int,
+            lucro FLOAT,
+            PRIMARY KEY (id)
         );
         """
         cursor.execute(create_table_query)
@@ -72,7 +68,7 @@ def lambda_handler(event, context):
         # Carga dos dados transformados do DataFrame para a tabela
         for index, row in df.iterrows():
             cursor.execute("INSERT INTO nova_tabela (coluna1, coluna2, preco) VALUES (%s, %s, %s)",
-                           (row['coluna1'], row['coluna2'], row['preco']))
+                           (row['id'], row['title'], row['revenue'], row['budget'], row['release_date'], row['vote_count'], row['lucro']))
 
         conn.commit()
         conn.close()
