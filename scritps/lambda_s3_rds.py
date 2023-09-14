@@ -3,53 +3,69 @@ import pymysql
 import pandas as pd
 
 def lambda_handler(event, context):
-    s3_client = boto3.client('s3')
+    bucket_name = 'integrationflowbucket'
+    object_key = '/tmp/movies_metadatas.csv'
+    s3 = boto3.client('s3')
+    
     rds_host = 'database-1.czoi0d5bgvz4.sa-east-1.rds.amazonaws.com'
     username = 'admin'
     password = 'New*3382'
-    database_name = 'database-1'
+    database_name = 'dbteste'
 
     try:
-        # Informacoes do objeto s3
-        bucket_name = event['Records'][0]['s3']['bucket']['integrationflowbucket']
-        object_key = event['Records'][0]['object']['/tmp/movies_metadatas.csv']
-
-        # Conexao RDS
-        conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name)
-        cursor = conn.cursor()
-
-        # Le arquivo do S3 e cria tabela no RDS com os dados
-        s3_client.download_file(bucket_name, object_key, '/tmp/movies_metadatas.csv')
-        df = pd.read_csv('/tmp/movies_metadatas.csv')
-
+        # Le bucket s3
+        response = s3.get_object(Bucket=bucket_name,Key=object_key)
+        df = pd.read_csv(response['Body'], delimiter=';')
+         
         # Efetua transformação do dado
         # Remove unnamed collumns
         for i in range(24, 27):
             df = df.drop(columns=[f'Unnamed: {i}'])
-        
-        # Seleciona somente as colunas necessarias
-        df = df[['id', 'title', 'genres', 'revenue', 'budget', 'release_date', 'vote_count']]
 
-        df['id'] = pd.to_numeric(df['id'], errors='coerce')
+        # Seleciona colunas desejadas
+        df = df[['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count']]
+
+        # Deleta nulos
+        df = df.dropna(subset=['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
+
+        # Limpa coluna id
+        df = df[df['id'].str.contains(r'^[0-9]+$', regex=True)]
         df['id'] = df['id'].astype(int)
 
-        # Transformar valores string em NaN para depois dropá-los
-        df['revenue'] = pd.to_numeric(df['revenue'], errors='coerce')
+        # Limpa coluna revenue
+        df = df[~df['revenue'].str.contains(r'\d{2}/\d{2}/\d{4}', regex=True)]
+        df['revenue'] = df['revenue'].astype(float)
 
-        # Transformar valores string em NaN para depois dropá-los
-        df['budget'] = pd.to_numeric(df['budget'], errors='coerce')
+        # Budget to float
+        df['budget'] = df['budget'].astype(float)
 
-        df['vote_count'] = pd.to_numeric(df['vote_count'], errors='coerce')
+        # Limpa release_date
+        df = df[df['release_date'].str.contains(r'\d{2}/\d{2}/\d{4}', regex=True)]
+        df['release_date'] = df['release_date'].astype(str)
 
-        df[['title', 'release_date']] = df[['title', 'release_date']].astype(str)
+        # vote_count to int
+        df['vote_count'] = df['vote_count'].astype(int)
 
-        df = df.dropna(subset=['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
+        # Cria coluna lucro
+        df['lucro'] = df['revenue'] - df['budget']
+
+        # Remove valores onde lucro = 0
+        df = df[df['revenue'] != 0]
+
+        df['lucro'] = df['lucro'].astype(float)
 
         def formatar_monetario(valor):
             return '{:.2}'.format(valor)
 
         df['lucro'] = df['lucro'].apply(formatar_monetario)
 
+        df_without_header = df.copy()
+        df_without_header.columns = range(df_without_header.shape[1])
+        
+        # Conexao RDS
+        conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
+        cursor = conn.cursor()
+        
         # Criacao da tabela no RDS MySQL com a estrutura desejada
         create_table_query = """
         CREATE TABLE tbl_movies (
@@ -64,20 +80,22 @@ def lambda_handler(event, context):
         );
         """
         cursor.execute(create_table_query)
-
+        
         # Carga dos dados transformados do DataFrame para a tabela
-        for index, row in df.iterrows():
-            cursor.execute("INSERT INTO nova_tabela (coluna1, coluna2, preco) VALUES (%s, %s, %s)",
-                           (row['id'], row['title'], row['revenue'], row['budget'], row['release_date'], row['vote_count'], row['lucro']))
-
+        for index, row in df_without_header.iterrows():
+            sql = "INSERT INTO tbl_movies (id, title, revenue, budget, release_date, vote_count, lucro) VALUES (%i, %s, %f, %f, %s, %d, %f)"
+            values = (row['0'], row['1'], row['2'], row['3'], row['4'], row['5'], row['6'])
+            cursor.execute(sql, values)
+            
         conn.commit()
         conn.close()
 
+        return{
+            'statusCode': 200,
+            'body': 'Arquivo CSV lido com sucesso'
+        }
     except Exception as e:
-        print(f'Erro: {e}')
-        raise e
-
-    return {
-        'statusCode': 200,
-        'body': 'Transferência para o RDS concluída com sucesso'
-    }
+        return{
+            'statusCode': 500,
+            'body': f'Erro: {str(e)}'
+        }
