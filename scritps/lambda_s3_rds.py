@@ -22,15 +22,17 @@ def lambda_handler(event, context):
         for i in range(24, 27):
             df = df.drop(columns=[f'Unnamed: {i}'])
 
+        df = df.rename(columns={'id': 'id_movies'})
+
         # Seleciona colunas desejadas
-        df = df[['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count']]
+        df = df[['id_movies', 'title', 'revenue', 'budget', 'release_date', 'vote_count']]
 
         # Deleta nulos
-        df = df.dropna(subset=['id', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
+        df = df.dropna(subset=['id_movies', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
 
         # Limpa coluna id
-        df = df[df['id'].str.contains(r'^[0-9]+$', regex=True)]
-        df['id'] = df['id'].astype(int)
+        df = df[df['id_movies'].str.contains(r'^[0-9]+$', regex=True)]
+        df['id_movies'] = df['id_movies'].astype(int)
 
         # Limpa coluna revenue
         df = df[~df['revenue'].str.contains(r'\d{2}/\d{2}/\d{4}', regex=True)]
@@ -49,18 +51,22 @@ def lambda_handler(event, context):
         # Cria coluna lucro
         df['lucro'] = df['revenue'] - df['budget']
 
-        # Remove valores onde lucro = 0
-        df = df[df['revenue'] != 0]
-
         df['lucro'] = df['lucro'].astype(float)
 
-        def formatar_monetario(valor):
-            return '{:.2}'.format(valor)
+        # Remove valores = 0 de lucro
+        df = df.loc[df['lucro'] != 0.0]
+        
+        # Remove duplicados de id
+        df = df.drop_duplicates(subset='id_movies')
 
-        df['lucro'] = df['lucro'].apply(formatar_monetario)
+        # Define funcao que formata campo lucro
+        def formata_lucro(valor_lucro):
+            valor_numerico = float(valor_lucro)
+            valor_formatado = "${:,.2f}".format(valor_numerico)
+            return valor_formatado
 
-        df_without_header = df.copy()
-        df_without_header.columns = range(df_without_header.shape[1])
+        # Aplica funcao de formatacao
+        df['lucro'] = df['lucro'].apply(lambda x: formata_lucro(x))
         
         # Conexao RDS
         conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
@@ -68,23 +74,23 @@ def lambda_handler(event, context):
         
         # Criacao da tabela no RDS MySQL com a estrutura desejada
         create_table_query = """
-        CREATE TABLE tbl_movies (
-            id INT NOT NULL,
+        CREATE TABLE tbl_movies_2 (
+            id_movies INT NOT NULL,
             title VARCHAR(255),
             revenue FLOAT,
             budget FLOAT,
             release_date VARCHAR(15),
             vote_count int,
             lucro FLOAT,
-            PRIMARY KEY (id)
+            PRIMARY KEY (id_movies)
         );
         """
         cursor.execute(create_table_query)
         
         # Carga dos dados transformados do DataFrame para a tabela
-        for index, row in df_without_header.iterrows():
-            sql = "INSERT INTO tbl_movies (id, title, revenue, budget, release_date, vote_count, lucro) VALUES (%i, %s, %f, %f, %s, %d, %f)"
-            values = (row['0'], row['1'], row['2'], row['3'], row['4'], row['5'], row['6'])
+        for index, row in df.iterrows():
+            sql = "INSERT INTO tbl_movies_2 (id_movies, title, revenue, budget, release_date, vote_count, lucro) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            values = int(row['id_movies']), row['title'], float(row['revenue']), float(row['budget']), row['release_date'], int(row['vote_count']), float(row['lucro'])
             cursor.execute(sql, values)
             
         conn.commit()
@@ -92,7 +98,7 @@ def lambda_handler(event, context):
 
         return{
             'statusCode': 200,
-            'body': 'Arquivo CSV lido com sucesso'
+            'body': 'Arquivo CSV extraido, transformado e carregado com sucesso'
         }
     except Exception as e:
         return{
