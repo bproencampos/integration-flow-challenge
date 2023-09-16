@@ -23,3 +23,7 @@ FROM dbteste.tbl_movies_3
 WHERE vote_count > 1
 ORDER BY vote_count DESC
 LIMIT 10;
+
+
+SELECT * FROM moviesdb.tbl_genres WHERE id_movies = 862;
+
