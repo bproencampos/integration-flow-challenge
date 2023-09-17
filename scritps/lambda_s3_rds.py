@@ -26,10 +26,10 @@ def lambda_handler(event, context):
         df = df.rename(columns={'id': 'id_movies'})
 
         # Seleciona colunas desejadas
-        df = df[['id_movies', 'title', 'revenue', 'budget', 'release_date', 'vote_count']]
+        df = df[['id_movies', 'title', 'revenue', 'budget', 'release_date', 'vote_average', 'vote_count']]
 
         # Deleta nulos
-        df = df.dropna(subset=['id_movies', 'title', 'revenue', 'budget', 'release_date', 'vote_count'])
+        df = df.dropna(subset=['id_movies', 'title', 'revenue', 'budget', 'release_date',  'vote_average', 'vote_count'])
 
         # Limpa coluna id
         df = df[df['id_movies'].str.contains(r'^[0-9]+$', regex=True)]
@@ -38,6 +38,8 @@ def lambda_handler(event, context):
         # Limpa coluna revenue
         df = df[~df['revenue'].str.contains(r'\d{2}/\d{2}/\d{4}', regex=True)]
         df['revenue'] = df['revenue'].astype(float)
+        
+        df['vote_average'] = df['vote_average'].astype(float)
 
         # Budget to float
         df['budget'] = df['budget'].astype(float)
@@ -94,6 +96,7 @@ def lambda_handler(event, context):
                 revenue FLOAT,
                 budget FLOAT,
                 release_date VARCHAR(15),
+                vote_average FLOAT,
                 vote_count int,
                 lucro VARCHAR(50),
                 PRIMARY KEY (id_movies)
@@ -103,8 +106,8 @@ def lambda_handler(event, context):
         
         # Carga dos dados transformados do DataFrame para a tabela
         for index, row in df.iterrows():
-            sql = "INSERT INTO tbl_movies (id_movies, title, revenue, budget, release_date, vote_count, lucro) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            values = int(row['id_movies']), row['title'], float(row['revenue']), float(row['budget']), row['release_date'], int(row['vote_count']), row['lucro']
+            sql = "INSERT INTO tbl_movies (id_movies, title, revenue, budget, release_date, vote_average, vote_count, lucro) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+            values = int(row['id_movies']), row['title'], float(row['revenue']), float(row['budget']), row['release_date'], float(row['vote_average']), int(row['vote_count']), row['lucro']
             cursor.execute(sql, values)
             
         conn.commit()
