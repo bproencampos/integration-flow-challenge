@@ -14,6 +14,7 @@ def lambda_handler(event, context):
     username = 'admin'
     password = 'New*3382'
     database_name = 'moviesdb'
+    table_name = 'tbl_genres'
     
     try:
         # Le bucket s3
@@ -78,16 +79,29 @@ def lambda_handler(event, context):
         conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
         cursor = conn.cursor()
         
-        # Criacao da tabela no RDS MySQL com a estrutura desejada
-        create_table_query = """
-        CREATE TABLE tbl_genres (
-            id_genres INT NOT NULL,
-            name_genres VARCHAR(255),
-            id_movies INT NOT NULL,
-            PRIMARY KEY (id_genres, id_movies)
-        );
-        """
-        cursor.execute(create_table_query)
+        # Consulta SQL para verificar se a tabela existe
+        query = f"SHOW TABLES LIKE '{table_name}'"
+    
+        cursor.execute(query)
+    
+        # Verificar se a tabela existe
+        if cursor.fetchone():
+            # Esvazia tabela
+            create_table_query = """
+            DELETE FROM tbl_genres;
+            """
+            cursor.execute(create_table_query)
+        else:
+            # Criacao da tabela no RDS MySQL com a estrutura desejada
+            create_table_query = """
+            CREATE TABLE tbl_genres (
+                id_genres INT NOT NULL,
+                name_genres VARCHAR(255),
+                id_movies INT NOT NULL,
+                PRIMARY KEY (id_genres, id_movies)
+            );
+            """
+            cursor.execute(create_table_query)
         
         # Carga dos dados transformados do DataFrame para a tabela
         for index, row in df_new.iterrows():

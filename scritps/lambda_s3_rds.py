@@ -10,7 +10,8 @@ def lambda_handler(event, context):
     rds_host = 'database-1.czoi0d5bgvz4.sa-east-1.rds.amazonaws.com'
     username = 'admin'
     password = 'New*3382'
-    database_name = 'dbteste'
+    database_name = 'moviesdb'
+    table_name = 'tbl_movies'
 
     try:
         # Le bucket s3
@@ -72,25 +73,38 @@ def lambda_handler(event, context):
         conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
         cursor = conn.cursor()
         
-        # Criacao da tabela no RDS MySQL com a estrutura desejada
-        create_table_query = """
-        CREATE TABLE tbl_movies_2 (
-            id_movies INT NOT NULL,
-            title VARCHAR(255),
-            revenue FLOAT,
-            budget FLOAT,
-            release_date VARCHAR(15),
-            vote_count int,
-            lucro FLOAT,
-            PRIMARY KEY (id_movies)
-        );
-        """
-        cursor.execute(create_table_query)
+        # Consulta SQL para verificar se a tabela existe
+        query = f"SHOW TABLES LIKE '{table_name}'"
+    
+        cursor.execute(query)
+    
+        # Verificar se a tabela existe
+        if cursor.fetchone():
+            # Esvazia tabela
+            create_table_query = """
+            DELETE FROM tbl_movies;
+            """
+            cursor.execute(create_table_query)
+        else:
+            # Criacao da tabela no RDS MySQL com a estrutura desejada
+            create_table_query = """
+            CREATE TABLE tbl_movies (
+                id_movies INT NOT NULL,
+                title VARCHAR(255),
+                revenue FLOAT,
+                budget FLOAT,
+                release_date VARCHAR(15),
+                vote_count int,
+                lucro VARCHAR(50),
+                PRIMARY KEY (id_movies)
+            );
+            """
+            cursor.execute(create_table_query)
         
         # Carga dos dados transformados do DataFrame para a tabela
         for index, row in df.iterrows():
-            sql = "INSERT INTO tbl_movies_2 (id_movies, title, revenue, budget, release_date, vote_count, lucro) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-            values = int(row['id_movies']), row['title'], float(row['revenue']), float(row['budget']), row['release_date'], int(row['vote_count']), float(row['lucro'])
+            sql = "INSERT INTO tbl_movies (id_movies, title, revenue, budget, release_date, vote_count, lucro) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            values = int(row['id_movies']), row['title'], float(row['revenue']), float(row['budget']), row['release_date'], int(row['vote_count']), row['lucro']
             cursor.execute(sql, values)
             
         conn.commit()
