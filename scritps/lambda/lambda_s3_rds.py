@@ -5,7 +5,7 @@ import pandas as pd
 from botocore.exceptions import ClientError
 
 def lambda_handler(event, context):
-    bucket_name = 'integrationflowbucket'
+    bucket_name = 'flow-challenge-bucket'
     object_key = '/tmp/movies_metadatas.csv'
     s3 = boto3.client('s3')
 

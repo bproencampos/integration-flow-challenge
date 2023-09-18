@@ -13,7 +13,7 @@ def lambda_handler(event, context):
     github_url = f'https://raw.githubusercontent.com/bproencampos/integration-flow-challenge/develop/data_source/movies_metadatas.csv'
     
     # Nome do arquivo no S3
-    s3_bucket = 'integrationflowbucket'
+    s3_bucket = 'flow-challenge-bucket'
     s3_key = '/tmp/movies_metadatas.csv'    # Precisa ser TMP????
     
     # Cria cliente s3

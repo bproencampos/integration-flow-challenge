@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 
 def lambda_handler(event, context):
     
-    bucket_name = 'integrationflowbucket'
+    bucket_name = 'flow-challenge-bucket'
     object_key = '/tmp/movies_metadatas.csv'
     s3 = boto3.client('s3')
 
@@ -102,7 +102,7 @@ def lambda_handler(event, context):
         username = 'admin'
         password = database_credentials['password']
         database_name = 'moviesdb'
-        table_name = 'tbl_movies'
+        table_name = 'tbl_genres'
         
         # Conexao RDS
         conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
