@@ -3,19 +3,14 @@ import pandas as pd
 import ast
 import boto3
 import pymysql
+from botocore.exceptions import ClientError
 
 def lambda_handler(event, context):
     
     bucket_name = 'integrationflowbucket'
     object_key = '/tmp/movies_metadatas.csv'
     s3 = boto3.client('s3')
-    
-    rds_host = 'database-1.czoi0d5bgvz4.sa-east-1.rds.amazonaws.com'
-    username = 'admin'
-    password = 'New*3382'
-    database_name = 'moviesdb'
-    table_name = 'tbl_genres'
-    
+
     try:
         # Le bucket s3
         response = s3.get_object(Bucket=bucket_name,Key=object_key)
@@ -74,6 +69,40 @@ def lambda_handler(event, context):
         
         # Concatenar os DataFrames intermediários
         df_new = pd.concat([df_id_genres, df_name_genres], axis=1)
+        
+        def get_secret():
+    
+            secret_name = "rds!db-e240d9d9-80dc-4156-8c85-e6e6ed08459f"
+            region_name = "sa-east-1"
+        
+            # Create a Secrets Manager client
+            session = boto3.session.Session()
+            client = session.client(
+                service_name='secretsmanager',
+                region_name=region_name
+            )
+        
+            try:
+                get_secret_value_response = client.get_secret_value(
+                    SecretId=secret_name
+                )
+            except ClientError as e:
+                # For a list of exceptions thrown, see
+                # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html
+                raise e
+        
+            # Decrypts secret using the associated KMS key.
+            secret = get_secret_value_response['SecretString']
+            
+            return secret
+        
+        database_credentials = json.loads(get_secret())
+        
+        rds_host = 'database-1.czoi0d5bgvz4.sa-east-1.rds.amazonaws.com'
+        username = 'admin'
+        password = database_credentials['password']
+        database_name = 'moviesdb'
+        table_name = 'tbl_movies'
         
         # Conexao RDS
         conn = pymysql.connect(host=rds_host, user=username, password=password, database=database_name, connect_timeout=5)
